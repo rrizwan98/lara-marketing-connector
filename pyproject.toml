@@ -1,0 +1,19 @@
+[project]
+name = "lara-connector"
+version = "0.1.0"
+description = "Lara Marketing Connector — a remote MCP server carrying Lara's full marketing brain (45 skills + orchestration logic) for any MCP host."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Needed only in production (AUTH_DISABLED=0) for OAuth JWT verification.
+auth = ["pyjwt[crypto]>=2.8.0"]
+# Needed only when DATABASE_URL points to Postgres/Neon instead of SQLite.
+postgres = ["psycopg[binary]>=3.1"]
+
+[tool.lara]
+entrypoint = "server.py"

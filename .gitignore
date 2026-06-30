@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+lara.db
+lara_test.db
+.env
+.DS_Store
