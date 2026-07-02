@@ -1,0 +1,221 @@
+<!doctype html>
+<!-- Lara Marketing widget — ChatGPT Apps SDK template (ui://widget/lara-v1.html)
+     Renders purely from MCP Apps bridge tool results (ui/notifications/tool-result),
+     with legacy window.openai.toolOutput fallback. No external fetches (CSP-free).
+     Views auto-detect from structuredContent shape: session | catalog | route | skill. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a2e; --muted: #6b7280; --line: #e5e7eb;
+    --brand: #6d28d9; --brand-soft: #f3eefe; --chip: #f4f4f5; --ok: #059669;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #191921; --fg: #ececf1; --muted: #9ca3af; --line: #33333f;
+            --brand: #a78bfa; --brand-soft: #2a2438; --chip: #26262f; --ok: #34d399; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { padding: 14px 16px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--brand);
+          color: #fff; display: flex; align-items: center; justify-content: center;
+          font-weight: 700; font-size: 16px; flex: none; }
+  .head h1 { font-size: 15px; margin: 0; }
+  .head .sub { color: var(--muted); font-size: 12px; }
+  .badge { margin-left: auto; background: var(--brand-soft); color: var(--brand);
+           border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .stat { background: var(--chip); border-radius: 10px; padding: 8px 12px; min-width: 90px; }
+  .stat b { display: block; font-size: 16px; }
+  .stat span { color: var(--muted); font-size: 11px; }
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+  .chip b { color: var(--brand); }
+  input.search { width: 100%; padding: 8px 12px; margin: 8px 0; border: 1px solid var(--line);
+                 border-radius: 10px; background: var(--bg); color: var(--fg); outline: none; }
+  .group { margin: 10px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted);
+           text-transform: uppercase; letter-spacing: .04em; }
+  .skill { display: flex; gap: 10px; padding: 8px 10px; border: 1px solid var(--line);
+           border-radius: 10px; margin: 6px 0; align-items: flex-start; }
+  .skill .nm { font-weight: 600; white-space: nowrap; }
+  .skill .ds { color: var(--muted); font-size: 12px;
+               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .skill button { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--chip);
+                  color: var(--fg); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .skill button:hover { border-color: var(--brand); color: var(--brand); }
+  .rank { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .rank .r { background: var(--brand-soft); color: var(--brand); font-weight: 600;
+             border-radius: 10px; padding: 8px 14px; }
+  .why { color: var(--muted); font-size: 12px; }
+  .doc { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+         max-height: 420px; overflow: auto; white-space: pre-wrap; font-size: 13px; }
+  .doc h2 { font-size: 14px; margin: 12px 0 4px; color: var(--brand); }
+  .doc h3 { font-size: 13px; margin: 10px 0 3px; }
+  .foot { margin-top: 10px; color: var(--muted); font-size: 11px; }
+  .ok { color: var(--ok); }
+  pre.raw { background: var(--chip); border-radius: 10px; padding: 10px; overflow: auto; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="head">
+  <div class="logo">L</div>
+  <div><h1>Lara — Digital Marketing</h1><div class="sub">Loading…</div></div>
+</div></div>
+
+<script>
+(function () {
+  "use strict";
+  var payload = null;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function followUp(prompt) { // ChatGPT-only extension; safe no-op elsewhere
+    try {
+      if (window.openai && typeof window.openai.sendFollowUpMessage === "function") {
+        window.openai.sendFollowUpMessage({ prompt: prompt });
+      }
+    } catch (_) {}
+  }
+  window.__laraUse = function (name) {
+    followUp("Use Lara's '" + name + "' skill for my current task. Call domain_get_skill and follow it.");
+  };
+
+  function head(sub, badge) {
+    return '<div class="head"><div class="logo">L</div><div>' +
+      "<h1>Lara — Digital Marketing</h1>" +
+      '<div class="sub">' + esc(sub) + "</div></div>" +
+      (badge ? '<div class="badge">' + esc(badge) + "</div>" : "") + "</div>";
+  }
+  function foot() {
+    return '<div class="foot">Lara Marketing Connector · 45 marketing skills · works in ChatGPT, Claude, Codex &amp; any MCP host</div>';
+  }
+
+  function viewSession(p) {
+    var skills = p.skills_available || [];
+    var st = (p.user_state || {});
+    var clients = st.clients || [];
+    var lim = (st.limits || {});
+    var used = lim.tasks_used_today != null ? lim.tasks_used_today : "0";
+    var html = head("Session ready — your marketing employee is on the clock", (p.tier || "") + " plan");
+    html += '<div class="stats">' +
+      '<div class="stat"><b>' + skills.length + '</b><span>skills loaded</span></div>' +
+      '<div class="stat"><b>' + clients.length + '</b><span>saved clients</span></div>' +
+      '<div class="stat"><b>' + esc(used) + '</b><span>tasks used today</span></div>' +
+      '<div class="stat"><b class="ok">✓</b><span>skills-first mode</span></div></div>';
+    var cats = {};
+    // categories arrive via catalog view; here show a capability strip instead
+    var strip = ["Strategy", "Copy & Content", "SEO", "CRO", "Ads", "Email", "Social", "Growth", "Sales"];
+    html += '<div class="cats">' + strip.map(function (c) {
+      return '<span class="chip">' + esc(c) + "</span>";
+    }).join("") + "</div>";
+    if (clients.length) {
+      html += '<div class="group">Your clients</div><div class="cats">' + clients.map(function (c) {
+        return '<span class="chip"><b>' + esc(c) + "</b></span>";
+      }).join("") + "</div>";
+    }
+    html += '<div class="why" style="margin-top:10px">Ask for any marketing work — copy, SEO, ads, emails, launch plans — and Lara picks the right skill automatically.</div>';
+    return html + foot();
+  }
+
+  function viewCatalog(p) {
+    var skills = p.skills || [];
+    var html = head(skills.length + " marketing skills — every task follows one", "catalog");
+    html += '<input class="search" id="q" placeholder="Filter skills… (e.g. email, seo, ads)" oninput="__laraFilter(this.value)">';
+    var byCat = {};
+    skills.forEach(function (s) {
+      var c = s.category || "Other";
+      (byCat[c] = byCat[c] || []).push(s);
+    });
+    html += '<div id="cat-list">';
+    Object.keys(byCat).sort().forEach(function (cat) {
+      html += '<div class="group" data-cat>' + esc(cat) + "</div>";
+      byCat[cat].forEach(function (s) {
+        var nm = s.folder || s.name;
+        html += '<div class="skill" data-skill data-k="' + esc((nm + " " + (s.description || "")).toLowerCase()) + '">' +
+          '<div><div class="nm">' + esc(nm) + '</div><div class="ds">' + esc(s.description || "") + "</div></div>" +
+          '<button onclick="__laraUse(\'' + esc(nm) + '\')">Use</button></div>';
+      });
+    });
+    html += "</div>";
+    return html + foot();
+  }
+  window.__laraFilter = function (q) {
+    q = (q || "").toLowerCase();
+    var rows = document.querySelectorAll("[data-skill]");
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].style.display = !q || rows[i].getAttribute("data-k").indexOf(q) >= 0 ? "" : "none";
+    }
+  };
+
+  function viewRoute(p) {
+    var html = head("Best skill(s) for your task", "router");
+    html += '<div class="rank">' + (p.skills || []).map(function (s, i) {
+      return '<div class="r">' + (i + 1) + ". " + esc(s) + "</div>";
+    }).join("") + "</div>";
+    if (p.rationale) html += '<div class="why">' + esc(p.rationale) + "</div>";
+    if ((p.skills || []).length) {
+      html += '<div style="margin-top:10px"><button class="chip" style="cursor:pointer;border:1px solid var(--line)" ' +
+        'onclick="__laraUse(\'' + esc(p.skills[0]) + '\')">Open ' + esc(p.skills[0]) + " →</button></div>";
+    }
+    return html + foot();
+  }
+
+  function viewSkill(p) {
+    var body = String(p.body || "");
+    body = body.replace(/^---[\s\S]*?---\s*/, ""); // hide frontmatter
+    var rendered = esc(body)
+      .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+      .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+      .replace(/^# (.*)$/gm, "<h2>$1</h2>")
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    var html = head("Skill playbook — Lara follows this to do the work", esc(p.name || "skill"));
+    html += '<div class="doc">' + rendered + "</div>";
+    return html + foot();
+  }
+
+  function render() {
+    var el = document.getElementById("app");
+    if (!payload) return;
+    var p = payload;
+    try {
+      if (p.persona && p.router_map) el.innerHTML = viewSession(p);
+      else if (Array.isArray(p.skills) && p.rationale !== undefined) el.innerHTML = viewRoute(p);
+      else if (Array.isArray(p.skills)) el.innerHTML = viewCatalog(p);
+      else if (p.name && p.body) el.innerHTML = viewSkill(p);
+      else el.innerHTML = head("Result", "") + '<pre class="raw">' + esc(JSON.stringify(p, null, 2)) + "</pre>" + foot();
+    } catch (e) {
+      el.innerHTML = head("Result", "") + '<pre class="raw">' + esc(JSON.stringify(p, null, 2)) + "</pre>" + foot();
+    }
+  }
+  function setPayload(p) { if (p && typeof p === "object") { payload = p; render(); } }
+
+  // 1) MCP Apps bridge (standard): host delivers tool results as JSON-RPC over postMessage
+  window.addEventListener("message", function (ev) {
+    if (ev.source !== window.parent) return;
+    var m = ev.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method === "ui/notifications/tool-result") {
+      var prm = m.params || {};
+      setPayload(prm.structuredContent || (prm.result && prm.result.structuredContent) || prm);
+    } else if (m.method === "ui/notifications/tool-input") {
+      // approval-gated input delivery — nothing to render yet
+    }
+  }, { passive: true });
+
+  // 2) Legacy window.openai runtime (compatibility)
+  if (window.openai && window.openai.toolOutput) setPayload(window.openai.toolOutput);
+  window.addEventListener("openai:set_globals", function (ev) {
+    var g = ev.detail && ev.detail.globals;
+    if (g && g.toolOutput) setPayload(g.toolOutput);
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

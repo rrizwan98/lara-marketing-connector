@@ -59,7 +59,19 @@ Defaults: `AUTH_DISABLED=1`, `GATING_ENABLED=false`, `PUBLIC_TIER=max`, SQLite.
 
 Every tool except `health`/`begin_session` needs the `session_token` from `begin_session`.
 
+## ChatGPT App (Apps SDK widget) — progressive enhancement
+The server ships a widget template (`ui://widget/lara-v1.html`, MIME
+`text/html;profile=mcp-app`, source `web/lara-widget.html`). In **ChatGPT**,
+`begin_session`, `domain_list_skills`, `domain_route_task`, and `domain_get_skill`
+render an interactive Lara panel (session dashboard, 45-skill catalog with search,
+route results, skill playbooks). Tool `_meta` carries both the MCP Apps standard key
+(`ui.resourceUri`) and the ChatGPT alias (`openai/outputTemplate`). Hosts without
+widget support (Claude, Claude Code, Codex, CLIs) ignore the template and get the
+exact same text/structured responses as before — no behavior change.
+
 ## Connect from a host
+- **ChatGPT (as an App):** Settings → Apps & Connectors → enable Developer mode →
+  Create app → paste the `/mcp` URL. Widget-enabled tools render the Lara panel.
 - **claude.ai:** Settings → Connectors → Add custom connector → paste the `/mcp` URL.
 - **Claude Code / Codex:** add an MCP server pointing at the `/mcp` URL.
 - **OpenClaw:** add it as an MCP server in `openclaw.json`.

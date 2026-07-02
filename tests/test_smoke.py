@@ -123,6 +123,36 @@ async def main() -> None:
         hist = data_of(await client.call_tool("user_get_history", {"session_token": token, "client": "Acme"}))
         check("history has entry", hist.get("ok") and len(hist.get("deliverables", [])) == 1, str(hist)[:120])
 
+        # ---- ChatGPT App layer (Apps SDK) — progressive enhancement checks ----
+        WIDGET_URI = "ui://widget/lara-v1.html"
+        tools = await client.list_tools()
+        check("still exactly 13 tools (no behavior change)", len(tools) == 13, f"got {len(tools)}")
+        by_name = {t.name: t for t in tools}
+
+        def tool_meta(t):
+            d = t.model_dump(by_alias=True)
+            return d.get("_meta") or d.get("meta") or {}
+
+        for name in ("begin_session", "domain_list_skills", "domain_route_task", "domain_get_skill"):
+            m = tool_meta(by_name[name])
+            ok_std = (m.get("ui") or {}).get("resourceUri") == WIDGET_URI
+            ok_alias = m.get("openai/outputTemplate") == WIDGET_URI
+            check(f"{name} links widget (std + ChatGPT alias)", ok_std and ok_alias, str(m)[:140])
+
+        m_prof = tool_meta(by_name["user_get_profile"])
+        check("user_get_profile stays text-only (no widget)",
+              "ui" not in m_prof and "openai/outputTemplate" not in m_prof, str(m_prof)[:140])
+
+        res = await client.read_resource(WIDGET_URI)
+        first = res[0] if isinstance(res, list) else res.contents[0]
+        mime = getattr(first, "mimeType", None) or getattr(first, "mime_type", None)
+        html = getattr(first, "text", "") or ""
+        check("widget resource readable", len(html) > 1000, f"len={len(html)}")
+        check("widget MIME is MCP Apps standard", mime == "text/html;profile=mcp-app", f"got {mime}")
+        check("widget handles bridge + legacy runtime",
+              "ui/notifications/tool-result" in html and "openai:set_globals" in html)
+        check("widget is Lara-branded", "Lara — Digital Marketing" in html)
+
     print(f"\n{_PASS} passed, {_FAIL} failed")
     sys.exit(1 if _FAIL else 0)
 

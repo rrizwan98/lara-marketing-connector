@@ -24,7 +24,7 @@ import session
 import skills_repo
 from fastmcp import FastMCP
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 GATING_ENABLED = os.environ.get("GATING_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
 PUBLIC_TIER = os.environ.get("PUBLIC_TIER", "max")
 HOST = os.environ.get("HOST", "127.0.0.1")
@@ -32,6 +32,64 @@ PORT = int(os.environ.get("PORT", "8000"))
 TRANSPORT = os.environ.get("LARA_TRANSPORT", "http")
 
 mcp = FastMCP("lara-marketing")
+
+
+# --------------------------------------------------------------------------- #
+# ChatGPT App widget (Apps SDK layer — progressive enhancement)
+#
+# ChatGPT renders this template as an interactive widget for the tools that
+# link to it below. Hosts that don't support MCP Apps (Claude, Codex, CLIs)
+# simply ignore the resource and the tool _meta, so behavior there is
+# unchanged. The widget renders purely from structuredContent, so tool
+# response shapes stay identical everywhere.
+#
+# Cache rule (official docs): the URI is the cache key — version it
+# (lara-v1 → lara-v2) on breaking widget changes and update WIDGET_URI.
+# --------------------------------------------------------------------------- #
+
+WIDGET_URI = "ui://widget/lara-v1.html"
+WIDGET_MIME = "text/html;profile=mcp-app"  # MCP Apps standard (legacy: text/html+skybridge)
+_WIDGET_PATH = os.path.join(os.path.dirname(__file__), "web", "lara-widget.html")
+
+
+def _widget_html() -> str:
+    with open(_WIDGET_PATH, "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
+@mcp.resource(
+    WIDGET_URI,
+    name="lara-widget",
+    mime_type=WIDGET_MIME,
+    meta={
+        "ui": {"prefersBorder": True},
+        "openai/widgetDescription": (
+            "Interactive Lara marketing panel: session dashboard, the 45-skill "
+            "catalog, task routing results, and skill playbooks."
+        ),
+    },
+)
+def lara_widget() -> str:
+    """UI template rendered by ChatGPT for Lara's widget-enabled tools."""
+    return _widget_html()
+
+
+def _widget_meta(invoking: str, invoked: str) -> dict:
+    """Tool _meta linking to the widget template.
+
+    `ui.resourceUri` is the MCP Apps standard key; `openai/outputTemplate` is
+    the ChatGPT compatibility alias (both point at the same template).
+    """
+    return {
+        "ui": {"resourceUri": WIDGET_URI},
+        "openai/outputTemplate": WIDGET_URI,
+        "openai/toolInvocation/invoking": invoking,
+        "openai/toolInvocation/invoked": invoked,
+    }
+
+
+READ_ONLY = {"readOnlyHint": True}
+BOUNDED_WRITE = {"readOnlyHint": False, "openWorldHint": False, "destructiveHint": False}
 
 
 # --------------------------------------------------------------------------- #
@@ -60,14 +118,17 @@ def _effective_tier_for_user(user: dict) -> str:
 # open tools (no session)
 # --------------------------------------------------------------------------- #
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def health() -> dict:
     """Liveness check. No identity or state. Returns server name, version, gating flag."""
     return {"ok": True, "name": "lara-marketing", "version": VERSION,
             "gating_enabled": GATING_ENABLED, "skills": skills_repo.count()}
 
 
-@mcp.tool
+@mcp.tool(
+    annotations={**BOUNDED_WRITE, "idempotentHint": True},
+    meta=_widget_meta("Starting your Lara session…", "Lara is ready."),
+)
 def begin_session() -> dict:
     """START HERE. Open a Lara session and receive her operating contract: persona, the
     mandatory rules, the task->skill router map, the skills available to you, your saved
@@ -102,7 +163,7 @@ def begin_session() -> dict:
 # config_* (brain re-fetch)
 # --------------------------------------------------------------------------- #
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def config_get_persona(session_token: str) -> dict:
     """Re-fetch Lara's persona/voice mid-session."""
     payload, err = _open_session(session_token)
@@ -111,7 +172,7 @@ def config_get_persona(session_token: str) -> dict:
     return {"ok": True, "persona": config_store.PERSONA}
 
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def config_get_rules(session_token: str) -> dict:
     """Re-fetch Lara's mandatory rules and the fail-closed contract."""
     payload, err = _open_session(session_token)
@@ -125,7 +186,10 @@ def config_get_rules(session_token: str) -> dict:
 # domain_* (skills now; real tools later)
 # --------------------------------------------------------------------------- #
 
-@mcp.tool
+@mcp.tool(
+    annotations=READ_ONLY,
+    meta=_widget_meta("Opening the skills catalog…", "Catalog ready."),
+)
 def domain_list_skills(session_token: str) -> dict:
     """List the marketing skills catalog (name, description, category). 'allowed' reflects
     your tier. Use this, or domain_route_task, to choose a skill for the task."""
@@ -139,7 +203,10 @@ def domain_list_skills(session_token: str) -> dict:
     return {"ok": True, "skills": skills}
 
 
-@mcp.tool
+@mcp.tool(
+    annotations=READ_ONLY,
+    meta=_widget_meta("Loading the skill playbook…", "Playbook loaded."),
+)
 def domain_get_skill(session_token: str, name: str) -> dict:
     """Get the FULL instructions (SKILL.md body) for one marketing skill, then follow them.
     Call this for every marketing task after choosing the skill. Counts as one task."""
@@ -162,7 +229,10 @@ def domain_get_skill(session_token: str, name: str) -> dict:
     return {"ok": True, "name": name, "body": body}
 
 
-@mcp.tool
+@mcp.tool(
+    annotations=READ_ONLY,
+    meta=_widget_meta("Picking the right skill…", "Skill selected."),
+)
 def domain_route_task(session_token: str, task: str) -> dict:
     """Suggest the best skill(s) for a free-text marketing task using the router map.
     A cheap helper that does not consume your daily task quota."""
@@ -193,7 +263,7 @@ def domain_route_task(session_token: str, task: str) -> dict:
 # user_* (per-user, keyed by verified sub from the token)
 # --------------------------------------------------------------------------- #
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def user_get_profile(session_token: str) -> dict:
     """Return the caller's email, tier, client count, and limits/usage."""
     payload, err = _open_session(session_token)
@@ -207,7 +277,7 @@ def user_get_profile(session_token: str) -> dict:
                        "tasks_used_today": db.get_usage_today(sub)}}
 
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def user_list_clients(session_token: str) -> dict:
     """List the caller's saved marketing clients."""
     payload, err = _open_session(session_token)
@@ -216,7 +286,7 @@ def user_list_clients(session_token: str) -> dict:
     return {"ok": True, "clients": db.list_clients(payload["sub"])}
 
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def user_get_client_context(session_token: str, client: str) -> dict:
     """Get a client's product-marketing context (Markdown), or null if not set yet."""
     payload, err = _open_session(session_token)
@@ -228,7 +298,7 @@ def user_get_client_context(session_token: str, client: str) -> dict:
     return {"ok": True, "client": client.strip(), "context_md": ctx}
 
 
-@mcp.tool
+@mcp.tool(annotations={**BOUNDED_WRITE, "idempotentHint": True})
 def user_save_client_context(session_token: str, client: str, context_md: str) -> dict:
     """Create or update a client's product-marketing context. Build this with the
     product-marketing skill before doing real work for a client."""
@@ -250,7 +320,7 @@ def user_save_client_context(session_token: str, client: str, context_md: str) -
     return {"ok": True, "client": client}
 
 
-@mcp.tool
+@mcp.tool(annotations=READ_ONLY)
 def user_get_history(session_token: str, client: str, limit: int = 10) -> dict:
     """Get recent deliverables/notes for a client (the 'previous work' memory)."""
     payload, err = _open_session(session_token)
@@ -266,7 +336,7 @@ def user_get_history(session_token: str, client: str, limit: int = 10) -> dict:
     return {"ok": True, "client": client, "deliverables": rows}
 
 
-@mcp.tool
+@mcp.tool(annotations=BOUNDED_WRITE)
 def user_log_deliverable(session_token: str, client: str, note: str) -> dict:
     """Record a one-line note about a deliverable you produced for a client."""
     payload, err = _open_session(session_token)
