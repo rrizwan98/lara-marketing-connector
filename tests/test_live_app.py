@@ -8,7 +8,7 @@ import asyncio, json, sys
 from fastmcp import Client
 
 URL = sys.argv[1] if len(sys.argv) > 1 else "https://rrizwan98-lara-marketing-connector.hf.space/mcp"
-WIDGET_URI = "ui://widget/lara-v1.html"
+WIDGET_URI = "ui://widget/lara-v2.html"
 _P = _F = 0
 
 

@@ -47,7 +47,7 @@ mcp = FastMCP("lara-marketing")
 # (lara-v1 → lara-v2) on breaking widget changes and update WIDGET_URI.
 # --------------------------------------------------------------------------- #
 
-WIDGET_URI = "ui://widget/lara-v1.html"
+WIDGET_URI = "ui://widget/lara-v2.html"
 WIDGET_MIME = "text/html;profile=mcp-app"  # MCP Apps standard (legacy: text/html+skybridge)
 _WIDGET_PATH = os.path.join(os.path.dirname(__file__), "web", "lara-widget.html")
 
@@ -241,6 +241,8 @@ def domain_route_task(session_token: str, task: str) -> dict:
         return err
     if not task or not task.strip():
         return _err("bad_input", "Provide a task description.")
+
+    # scoring unchanged (original router behavior)
     words = set(w for w in "".join(c if c.isalnum() else " " for c in task.lower()).split() if len(w) > 2)
     scored: dict[str, int] = {}
     for phrase, skill in config_store.ROUTER_MAP.items():
@@ -256,7 +258,15 @@ def domain_route_task(session_token: str, task: str) -> dict:
         rationale = "No direct match — start from marketing-ideas or product-marketing."
     else:
         rationale = "Matched against the router map. Read the top skill with domain_get_skill."
-    return {"ok": True, "skills": ranked[:3], "rationale": rationale}
+
+    # additive, UI-only enrichment: echo the task + describe the suggested skills
+    top = ranked[:3]
+    catalog = {c["folder"]: c for c in skills_repo.get_catalog()}
+    details = [{"name": n,
+                "description": catalog.get(n, {}).get("description", ""),
+                "category": catalog.get(n, {}).get("category", "")} for n in top]
+    return {"ok": True, "task": task.strip(), "skills": top,
+            "details": details, "rationale": rationale}
 
 
 # --------------------------------------------------------------------------- #

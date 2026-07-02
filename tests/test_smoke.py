@@ -123,8 +123,15 @@ async def main() -> None:
         hist = data_of(await client.call_tool("user_get_history", {"session_token": token, "client": "Acme"}))
         check("history has entry", hist.get("ok") and len(hist.get("deliverables", [])) == 1, str(hist)[:120])
 
+        # ---- route response enrichment (UI-only, additive keys) ----
+        rt2 = data_of(await client.call_tool("domain_route_task",
+                      {"session_token": token, "task": "plan a product launch next month"}))
+        check("route echoes task + details for widget",
+              rt2.get("ok") and bool(rt2.get("task")) and len(rt2.get("details", [])) >= 1,
+              str(rt2)[:120])
+
         # ---- ChatGPT App layer (Apps SDK) — progressive enhancement checks ----
-        WIDGET_URI = "ui://widget/lara-v1.html"
+        WIDGET_URI = "ui://widget/lara-v2.html"
         tools = await client.list_tools()
         check("still exactly 13 tools (no behavior change)", len(tools) == 13, f"got {len(tools)}")
         by_name = {t.name: t for t in tools}
@@ -151,7 +158,7 @@ async def main() -> None:
         check("widget MIME is MCP Apps standard", mime == "text/html;profile=mcp-app", f"got {mime}")
         check("widget handles bridge + legacy runtime",
               "ui/notifications/tool-result" in html and "openai:set_globals" in html)
-        check("widget is Lara-branded", "Lara — Digital Marketing" in html)
+        check("widget is Lara-branded", "Lara · Canz Marketing" in html)
 
     print(f"\n{_PASS} passed, {_FAIL} failed")
     sys.exit(1 if _FAIL else 0)
